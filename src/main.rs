@@ -8,6 +8,7 @@ mod interrupt;
 mod linux;
 mod logging;
 mod patch;
+mod toolchain;
 
 use clap::{Arg, App, SubCommand};
 use crate::error::Result;
@@ -21,16 +22,23 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
         let mut agent = linux::new(&config, interrupt)?;
         let check_update = matches.is_present("check-update");
         let fetch = matches.is_present("fetch");
+        let make = matches.is_present("make");
 
         if check_update {
             if agent.check_update()? {
                 info!("A new version of the Linux kernel is available");
-            } else {
+            } else if ! fetch {
                 std::process::exit(100);
             }
         }
         if fetch {
             agent.fetch()?;
+        }
+        if make {
+            // Retrive the make target to be run. It is a required argument,
+            // so we can safely unwrap().
+            let target = matches.value_of("make").unwrap();
+            agent.make(target)?;
         }
     }
     Ok(())
@@ -77,6 +85,7 @@ fn main() {
             .arg(Arg::with_name("make")
                 .long("make")
                 .value_name("TARGET")
+                .default_value("all")
                 .help("Run a make target in the Linux tree")
                 .takes_value(true))
             .arg(Arg::with_name("check-update")

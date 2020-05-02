@@ -4,6 +4,7 @@ use std::io::Write;
 
 use crate::config::Config;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 use url::Url;
 use log::*;
 
@@ -12,6 +13,7 @@ use crate::error::Result;
 use crate::error;
 use crate::download;
 use crate::decompress;
+use crate::toolchain;
 use crate::interrupt::Interrupt;
 use crate::patch;
 
@@ -38,6 +40,10 @@ pub struct Linux {
     base_url: Url,
     http_handle: curl::easy::Easy,
     interrupt: Interrupt,
+    arch: String,
+    jobs: usize,
+    toolchain: String,
+    toolchain_url: url::Url,
 }
 
 impl Linux {
@@ -118,7 +124,7 @@ impl Linux {
         tar_path.push(arch);
 
         // Retrieve the .tar.xz archive
-        //download::to_file(&mut self.http_handle, &url, &tar_path)?;
+        download::to_file(&mut self.http_handle, &url, &tar_path)?;
 
         // Uncompress it!
         let out_dir = decompress::untar(&tar_path)?;
@@ -245,6 +251,26 @@ impl Linux {
             Ok(true)
         }
     }
+
+    pub fn make(&self, make_target: &str) -> Result<()> {
+        let mut cross_compile = toolchain::fetch(
+            &self.toolchain_url, &self.download_dir)?;
+        cross_compile.push(self.toolchain.clone());
+
+        let status = Command::new("make")
+            .arg(format!("O={}", self.build_dir.to_str().unwrap()))
+            .arg(format!("ARCH={}", self.arch))
+            .arg(format!("CROSS_COMPILE={}", cross_compile.to_str().unwrap()))
+            .arg("-C").arg(self.source_dir.clone())
+            .arg(format!("-j{}", self.jobs))
+            .arg("--")
+            .arg(make_target)
+            .status()
+            .context(error::ProgFailed{ proc: "make".to_string() })?;
+        ensure!(status.success(), error::MakeFailed{
+            target: make_target.to_string() });
+        Ok(())
+    }
 }
 
 
@@ -307,6 +333,11 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
         version_file: v_file,
         base_url: Url::parse(&url).context(error::InvalidLinuxURL{})?,
         http_handle: curl::easy::Easy::new(),
+        jobs: config.jobs,
+        arch: config.toolchain.linux_arch.clone(),
+        toolchain: config.toolchain.cross_compile.clone(),
+        toolchain_url: Url::parse(&config.toolchain.url)
+            .context(error::InvalidToolchainURL{})?,
         interrupt: interrupt,
     })
 }

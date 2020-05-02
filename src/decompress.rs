@@ -11,7 +11,7 @@ use crate::error;
 use snafu::{ResultExt, OptionExt, ensure};
 use log::*;
 
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 
 pub fn untar(path: &std::path::PathBuf) -> Result<std::path::PathBuf> {
@@ -28,6 +28,7 @@ pub fn untar(path: &std::path::PathBuf) -> Result<std::path::PathBuf> {
     // We then check that tar does not fail before continuing.
     info!("Decompressing {:#?}", path);
     let status = Command::new("tar")
+        .stdin(Stdio::null())
         .arg("-C")
         .arg(dir)
         .arg("-xf")
@@ -37,8 +38,8 @@ pub fn untar(path: &std::path::PathBuf) -> Result<std::path::PathBuf> {
     ensure!(status.success(), error::TarFailed{ path: path.clone() });
 
     // If the archive is in 'download/X.tar.xz', the output path MUST be
-    // 'download/X', because this is what u-boot and linux do, and we
-    // rely on that behavior.
+    // 'download/X', because this is what u-boot, linux and the GNU
+    // toolchain do, and we rely on that behavior.
     let mut p = path.clone();
     p.set_extension(""); /* Strip .xz */
     p.set_extension(""); /* Strip .tar */

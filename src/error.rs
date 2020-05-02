@@ -27,6 +27,10 @@ pub enum Error {
     InvalidLinuxURL {
         source: url::ParseError,
     },
+    #[snafu(display("The URL to retrieve the toolchain seems invalid: {}", source))]
+    InvalidToolchainURL {
+        source: url::ParseError,
+    },
 
     #[snafu(display("Failed to read version file {}: {}", path, source))]
     FailedToReadVersion {
@@ -184,6 +188,16 @@ pub enum Error {
         from: std::path::PathBuf,
         to: std::path::PathBuf,
         source: std::io::Error,
+    },
+
+    #[snafu(display("Failed to run the make target '{}'", target))]
+    MakeFailed {
+        target: String,
+    },
+
+    #[snafu(display("Failed to extract last URL component from {:#?}", url))]
+    URLExtractError {
+        url: url::Url,
     },
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;
