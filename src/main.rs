@@ -27,7 +27,7 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
         if check_update {
             if agent.check_update()? {
                 info!("A new version of the Linux kernel is available");
-            } else if ! fetch {
+            } else {
                 std::process::exit(100);
             }
         }
