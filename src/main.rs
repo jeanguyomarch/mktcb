@@ -32,10 +32,7 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
         if fetch {
             agent.fetch()?;
         }
-
     }
-
-    println!("{:?}", config);
     Ok(())
 }
 
@@ -103,5 +100,4 @@ fn main() {
             std::process::exit(2);
         }
     }
-
 }

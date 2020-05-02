@@ -12,6 +12,7 @@ use crate::error;
 #[derive(Debug)]
 pub struct Config {
     pub build_dir: PathBuf,
+    pub lib_dir: PathBuf,
     pub download_dir: PathBuf,
     pub toolchain: ToolchainConfig,
     pub linux: ComponentConfig,
@@ -31,7 +32,7 @@ pub struct ToolchainConfig {
 #[derive(Debug, Deserialize)]
 pub struct ComponentConfig {
     pub version: String,
-    pub config: PathBuf,
+    pub config: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,15 +65,19 @@ where
 /// Once we have loaded a target configuration, the config paths must be
 /// updated to reflect their actual location. This function does exactly
 /// this, and makes sure the file is a valid one
-fn make_config_path(library: &PathBuf, comp: &str, item: &ComponentConfig) -> Result<PathBuf> {
-    let mut path = library.clone();
-    path.push("configs");
-    path.push(comp);
-    path.push(item.version.clone());
-    path.push(item.config.clone());
+fn make_config_path(library: &PathBuf, comp: &str, item: &ComponentConfig) -> Result<Option<PathBuf>> {
+    if let Some(cfg) = &item.config {
+        let mut path = library.clone();
+        path.push("configs");
+        path.push(comp);
+        path.push(item.version.clone());
+        path.push(cfg);
 
-    ensure!(path.exists(), error::FileDoesNotExist{ path: path.clone() });
-    Ok(path)
+        ensure!(path.exists(), error::FileDoesNotExist{ path: path.clone() });
+        Ok(Some(path))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Load the contents of the TOML file that describes the target as a
@@ -109,7 +114,8 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
     // Library - if not provided by the user, default to the current
     // working directory
     let library = match matches.value_of("library") {
-        Some(val) => PathBuf::from(val),
+        Some(val) => PathBuf::from(val).canonicalize()
+            .context(error::CanonFailed{dir: val.clone()})?,
         None => current_dir.clone(),
     };
 
@@ -127,7 +133,8 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
     // Download directory - if not provided by the user, default to a
     // directory named download/ in the current working directory
     let build_dir = match matches.value_of("build_dir") {
-        Some(val) => PathBuf::from(val),
+        Some(val) => PathBuf::from(val).canonicalize()
+            .context(error::CanonFailed{dir: val.clone()})?,
         None => {
             let mut build_dir = current_dir;
             build_dir.push("build");
@@ -163,5 +170,6 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
         uboot: target_cfg.uboot,
         jobs: jobs,
         target: target.to_string(),
+        lib_dir: library,
     })
 }

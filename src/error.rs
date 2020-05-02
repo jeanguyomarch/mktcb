@@ -167,5 +167,23 @@ pub enum Error {
         source: ctrlc::Error,
     },
 
+    #[snafu(display("Failed to iterate over directory {:#?}: {}", dir, source))]
+    DirIterFailed {
+        dir: std::path::PathBuf,
+        source: std::io::Error,
+    },
+
+    #[snafu(display("Failed to retrieve the canonical path to {:#?}: {}", dir, source))]
+    CanonFailed {
+        dir: std::path::PathBuf,
+        source: std::io::Error,
+    },
+
+    #[snafu(display("Failed to copy {:#?} to {:#?}: {}", from, to, source))]
+    CopyFailed {
+        from: std::path::PathBuf,
+        to: std::path::PathBuf,
+        source: std::io::Error,
+    },
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;

@@ -31,6 +31,9 @@ impl Drop for Guard {
 impl Interrupt {
 
     pub fn lock(&self) -> Guard {
+        assert!(! self.locked.load(Ordering::SeqCst),
+            "Recursive lock detected. This is forbidden.");
+
         self.locked.store(true, Ordering::SeqCst);
         Guard {
             must_stop: self.must_stop.clone(),

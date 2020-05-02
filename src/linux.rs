@@ -32,7 +32,9 @@ pub struct Linux {
     version_file: PathBuf,
     download_dir: PathBuf,
     source_dir: PathBuf,
+    patches_dir: PathBuf,
     build_dir: PathBuf,
+    config: Option<PathBuf>,
     base_url: Url,
     http_handle: curl::easy::Easy,
     interrupt: Interrupt,
@@ -97,6 +99,10 @@ impl Linux {
         std::fs::create_dir_all(&self.download_dir).context(
             error::CreateDirError{ path: self.download_dir.clone() })?;
 
+        // Let create the build directory. We will need it anyway.
+        std::fs::create_dir_all(&self.build_dir).context(
+            error::CreateDirError{ path: self.build_dir.clone() })?;
+
         // Determine the name of the linux archive to be downloaded.
         // Since the Linux maintainers are decent people, the downloaded
         // file will have the exact same name.
@@ -112,12 +118,26 @@ impl Linux {
         tar_path.push(arch);
 
         // Retrieve the .tar.xz archive
-        download::to_file(&mut self.http_handle, &url, &tar_path)?;
+        //download::to_file(&mut self.http_handle, &url, &tar_path)?;
 
         // Uncompress it!
         let out_dir = decompress::untar(&tar_path)?;
         ensure!(out_dir == self.source_dir, error::UnexpectedUntar{
             arch: tar_path.clone(), dir: self.source_dir.clone()});
+
+        // And now, we copy the kernel configuration, if mentioned in the
+        // user configuration
+        if let Some(cfg) = &self.config {
+            let mut build_cfg = self.build_dir.clone();
+            build_cfg.push(".config");
+            info!("Copying Linux configuration {:#?} in {:#?}", cfg, build_cfg);
+            std::fs::copy(cfg, &build_cfg).context(error::CopyFailed{
+                from: cfg.clone(),
+                to: build_cfg.clone(),
+            })?;
+        } else {
+            debug!("No Linux configuration selected.");
+        }
 
         // We now have the full source tree. They MAY be patched. If a signal
         // happens between patching and writing the version, the whole source
@@ -133,8 +153,32 @@ impl Linux {
         }
     }
 
-    /// TODO
+    /// Go over the patches for a given version of Linux, if they exist, and
+    /// apply them to the source tree.
+    /// NOTE: this function is called when the lock for patches is taken.
+    /// Don't lock!!
     fn apply_patches(&self) -> Result<()> {
+        let mut try_path = self.patches_dir.clone();
+        try_path.push(if self.version.mic == 0 {
+            format!("{}.{}", self.version.maj, self.version.min)
+        } else {
+            format!("{}", self.version)
+        });
+
+        // If there is a directory in the patches/ directory that exists for
+        // this kernel version, try iterate over them.
+        if try_path.is_dir() {
+            for dir_it in std::fs::read_dir(&try_path)
+                .context(error::DirIterFailed{dir: try_path.clone()})?
+            {
+                let entry = dir_it
+                    .context(error::DirIterFailed{dir: try_path.clone()})?
+                    .path();
+                if entry.is_file() {
+                    patch::patch(&self.source_dir, &entry)?;
+                }
+            }
+        }
         Ok(())
     }
 
@@ -144,7 +188,7 @@ impl Linux {
                 linux_dir: self.source_dir.clone(),
                 version_file: self.version_file.clone(),
             });
-            info!("{:#?} not found. Downloading Linux archive...", self.version_file);
+            info!("File {:#?} not found. Downloading Linux archive...", self.version_file);
             self.download_archive()?;
         } else {
             self.load_version()?;
@@ -189,6 +233,9 @@ impl Linux {
     }
 
     /// Check if a new update patch is present. If not, there are no updates.
+    /// If we cannot find the version file, we *assume* the sources were not
+    /// retrieved, so they technically can be updated (going from nothing to
+    /// something).
     pub fn check_update(&mut self) -> Result<bool> {
         if self.version_file.exists() {
             self.load_version()?;
@@ -228,11 +275,19 @@ fn make_version(str_version: &str) -> Result<Version> {
 }
 
 /// Compose a path involving a given Linux version
-fn make_dir_path(base_dir: &PathBuf, version: &Version) -> PathBuf {
+fn make_version_dir(base_dir: &PathBuf, version: &Version) -> PathBuf {
     let mut path = base_dir.clone();
     path.push(format!("linux-{}.{}", version.maj, version.min));
     path
 }
+
+fn make_patches_dir(base_dir: &PathBuf) -> PathBuf {
+    let mut path = base_dir.clone();
+    path.push("patches");
+    path.push("linux");
+    path
+}
+
 
 /// Create a new instance for Linux management
 pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
@@ -244,8 +299,10 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
         version.maj);
     Ok(Linux {
         download_dir: config.download_dir.clone(),
-        source_dir: make_dir_path(&config.download_dir, &version),
-        build_dir: make_dir_path(&config.build_dir, &version),
+        source_dir: make_version_dir(&config.download_dir, &version),
+        build_dir: make_version_dir(&config.build_dir, &version),
+        patches_dir: make_patches_dir(&config.lib_dir),
+        config: config.linux.config.clone(),
         version: version,
         version_file: v_file,
         base_url: Url::parse(&url).context(error::InvalidLinuxURL{})?,
