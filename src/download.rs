@@ -46,7 +46,7 @@ pub fn to_file(handle: &mut Easy, url: &url::Url, path: &std::path::PathBuf) -> 
         .template("{spinner:.green} [{elapsed_precise}] [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
         .progress_chars("#>-"));
 
-    handle.progress(true);
+    handle.progress(true).context(error::CURLSetupError{})?;
     {
         let mut transfer = handle.transfer();
         transfer.progress_function(|total, dl, _, _| {
