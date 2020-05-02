@@ -1,0 +1,9 @@
+toolchain = "armv7-eabihf"
+
+[linux]
+version = "5.4"
+config = "nanopi-r1-defconfig"
+
+[uboot]
+version = "2020.04"
+config = "nanopi-r1-defconfig"
