@@ -2,8 +2,12 @@
 
 use std::io::Write;
 
+use std::path::PathBuf;
+
 use crate::error::Result;
 use crate::error;
+use crate::decompress;
+use crate::util;
 
 use indicatif::{ProgressBar, ProgressStyle};
 use snafu::{ResultExt, ensure};
@@ -73,9 +77,49 @@ pub fn to_file(handle: &mut Easy, url: &url::Url, path: &std::path::PathBuf) -> 
     // return code to raise a proper error.
     let code = handle.response_code()
         .context(error::RequestError{url: url.clone()})?;
-    ensure!(code == 200, error::DownloadError{
+    let is_ok = match code {
+        200 => true,
+        226 => true, // See https://tools.ietf.org/html/rfc3229
+        _ => false,
+    };
+    ensure!(is_ok, error::DownloadError{
         url: url.clone(),
         code: code,
     });
+    Ok(())
+}
+
+
+/// Downloads a compressed tar archive from URL and store it in in_dir.
+/// The archive will be unpacked and also placed in in_dir, and the
+/// resulting output directory must patch expected_dir.
+pub fn to_unpacked_dir(
+    http_handle: &mut curl::easy::Easy,
+    url: &url::Url,
+    in_dir: &PathBuf,
+    expected_dir: &PathBuf) -> Result<()>
+{
+    // The output dir shall not already exist
+    assert!(! expected_dir.is_dir());
+
+    // First, create the directory in which the download will be placed
+    std::fs::create_dir_all(in_dir).context(
+        error::CreateDirError{ path: in_dir.clone() })?;
+
+    // Compose the full path to the archive to be downloaded
+    let mut tar_path = in_dir.clone();
+    tar_path.push(util::url_last(url)?);
+
+    // Download the archive and unpack it, effectively returning the unpacked
+    // directory
+    to_file(http_handle, url, &tar_path)?;
+    let out_dir = decompress::untar(&tar_path)?;
+
+    // Make sure it was extracted at the expected place
+    ensure!(&out_dir == expected_dir, error::UnexpectedUntar{
+        arch: tar_path.clone(),
+        dir: expected_dir.clone(),
+    });
+    assert!(expected_dir.is_dir());
     Ok(())
 }

@@ -9,10 +9,13 @@ mod linux;
 mod logging;
 mod patch;
 mod toolchain;
+mod uboot;
+mod util;
 
 use clap::{Arg, App, SubCommand};
 use crate::error::Result;
 use log::*;
+
 
 fn run(matches: &clap::ArgMatches) -> Result<()> {
     let config = config::new(&matches)?;
@@ -20,25 +23,37 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
 
     if let Some(matches) = matches.subcommand_matches("linux") {
         let mut agent = linux::new(&config, interrupt)?;
-        let check_update = matches.is_present("check-update");
-        let fetch = matches.is_present("fetch");
-        let make = matches.is_present("make");
 
-        if check_update {
+        if matches.is_present("check-update") {
             if agent.check_update()? {
                 info!("A new version of the Linux kernel is available");
             } else {
                 std::process::exit(100);
             }
         }
-        if fetch {
+        if matches.is_present("fetch") {
             agent.fetch()?;
         }
-        if make {
+        if matches.occurrences_of("make") != 0 {
             // Retrive the make target to be run. It is a required argument,
             // so we can safely unwrap().
             let target = matches.value_of("make").unwrap();
-            agent.make(target)?;
+
+            let toolchain = toolchain::new(&config)?;
+            agent.make(target, &toolchain)?;
+        }
+    } else if let Some(matches) = matches.subcommand_matches("uboot") {
+        let agent = uboot::new(&config, interrupt)?;
+        if matches.is_present("fetch") {
+            agent.fetch()?;
+        }
+        if matches.occurrences_of("make") != 0 {
+            // Retrive the make target to be run. It is a required argument,
+            // so we can safely unwrap().
+            let target = matches.value_of("make").unwrap();
+
+            let toolchain = toolchain::new(&config)?;
+            agent.make(target, &toolchain)?;
         }
     }
     Ok(())
@@ -95,6 +110,17 @@ fn main() {
             .arg(Arg::with_name("fetch")
                 .long("fetch")
                 .help("Retrieve the latest version of the Linux kernel")))
+        .subcommand(SubCommand::with_name("uboot")
+            .about("operations on the U-Boot")
+            .arg(Arg::with_name("make")
+                .long("make")
+                .value_name("TARGET")
+                .default_value("all")
+                .help("Run a make target in the U-Boot tree")
+                .takes_value(true))
+            .arg(Arg::with_name("fetch")
+                .long("fetch")
+                .help("Retrieve U-Boot")))
         .get_matches();
 
     if let Err(err) = logging::init(log::LevelFilter::Trace) {

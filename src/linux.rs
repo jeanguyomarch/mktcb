@@ -1,21 +1,25 @@
 /* This is part of mktcb - which is under the MIT License ********************/
 
+// Traits ---------------------------------------------------------------------
 use std::io::Write;
+// ----------------------------------------------------------------------------
 
-use crate::config::Config;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use url::Url;
 use log::*;
 
 use snafu::{ResultExt, ensure};
+
 use crate::error::Result;
 use crate::error;
 use crate::download;
 use crate::decompress;
-use crate::toolchain;
+use crate::toolchain::Toolchain;
+use crate::config::Config;
 use crate::interrupt::Interrupt;
 use crate::patch;
+use crate::util;
 
 struct Version {
     maj: usize,
@@ -37,13 +41,11 @@ pub struct Linux {
     patches_dir: PathBuf,
     build_dir: PathBuf,
     config: Option<PathBuf>,
-    base_url: Url,
+    base_url: url::Url,
     http_handle: curl::easy::Easy,
     interrupt: Interrupt,
     arch: String,
     jobs: usize,
-    toolchain: String,
-    toolchain_url: url::Url,
 }
 
 impl Linux {
@@ -100,15 +102,6 @@ impl Linux {
     /// end up decompressed in the download directory, and the version
     /// file will be initialized to the first release.
     fn download_archive(&mut self) -> Result<()> {
-        // First, make sure that the download directory exists. Create
-        // it if this is not the case.
-        std::fs::create_dir_all(&self.download_dir).context(
-            error::CreateDirError{ path: self.download_dir.clone() })?;
-
-        // Let create the build directory. We will need it anyway.
-        std::fs::create_dir_all(&self.build_dir).context(
-            error::CreateDirError{ path: self.build_dir.clone() })?;
-
         // Determine the name of the linux archive to be downloaded.
         // Since the Linux maintainers are decent people, the downloaded
         // file will have the exact same name.
@@ -118,45 +111,23 @@ impl Linux {
         // Compose the URL to be queried for the Linux archive.
         let url = self.base_url.join(&arch).context(error::InvalidLinuxURL{})?;
 
-        // Create the file that will hold the contents of the Linux
-        // archive.
-        let mut tar_path = self.download_dir.clone();
-        tar_path.push(arch);
+        // Download and unpack the sources
+        download::to_unpacked_dir(
+            &mut self.http_handle, &url, &self.download_dir, &self.source_dir)?;
 
-        // Retrieve the .tar.xz archive
-        download::to_file(&mut self.http_handle, &url, &tar_path)?;
-
-        // Uncompress it!
-        let out_dir = decompress::untar(&tar_path)?;
-        ensure!(out_dir == self.source_dir, error::UnexpectedUntar{
-            arch: tar_path.clone(), dir: self.source_dir.clone()});
-
-        // And now, we copy the kernel configuration, if mentioned in the
-        // user configuration
-        if let Some(cfg) = &self.config {
-            let mut build_cfg = self.build_dir.clone();
-            build_cfg.push(".config");
-            info!("Copying Linux configuration {:#?} in {:#?}", cfg, build_cfg);
-            std::fs::copy(cfg, &build_cfg).context(error::CopyFailed{
-                from: cfg.clone(),
-                to: build_cfg.clone(),
-            })?;
-        } else {
-            debug!("No Linux configuration selected.");
-        }
+        // Copy the configuration to the build dir, if any.
+        util::copy_config(&self.config, &self.build_dir)?;
 
         // We now have the full source tree. They MAY be patched. If a signal
         // happens between patching and writing the version, the whole source
         // tree will get corrupted (we cannot possibly know, without great manual
         // effort in which state it was left).
         // So, prevent SIGINT to destroy the directory.
-        {
-            self.interrupt.lock();
-            // We have just downloaded the sources. Apply patches, if any.
-            self.apply_patches()?;
-            // Finally, store the version
-            self.write_version()
-        }
+        self.interrupt.lock();
+        // We have just downloaded the sources. Apply patches, if any.
+        self.apply_patches()?;
+        // Finally, store the version
+        self.write_version()
     }
 
     /// Go over the patches for a given version of Linux, if they exist, and
@@ -171,27 +142,13 @@ impl Linux {
             format!("{}", self.version)
         });
 
-        // If there is a directory in the patches/ directory that exists for
-        // this kernel version, try iterate over them.
-        if try_path.is_dir() {
-            for dir_it in std::fs::read_dir(&try_path)
-                .context(error::DirIterFailed{dir: try_path.clone()})?
-            {
-                let entry = dir_it
-                    .context(error::DirIterFailed{dir: try_path.clone()})?
-                    .path();
-                if entry.is_file() {
-                    patch::patch(&self.source_dir, &entry)?;
-                }
-            }
-        }
-        Ok(())
+        patch::apply_patches_in(&try_path, &self.source_dir)
     }
 
     pub fn fetch(&mut self) -> Result<()> {
         if ! self.version_file.exists() {
             ensure!(! self.source_dir.exists(), error::CorruptedSourceDir{
-                linux_dir: self.source_dir.clone(),
+                dir: self.source_dir.clone(),
                 version_file: self.version_file.clone(),
             });
             info!("File {:#?} not found. Downloading Linux archive...", self.version_file);
@@ -252,15 +209,12 @@ impl Linux {
         }
     }
 
-    pub fn make(&self, make_target: &str) -> Result<()> {
-        let mut cross_compile = toolchain::fetch(
-            &self.toolchain_url, &self.download_dir)?;
-        cross_compile.push(self.toolchain.clone());
-
+    pub fn make(&self, make_target: &str, toolchain: &Toolchain) -> Result<()> {
+        toolchain.fetch()?;
         let status = Command::new("make")
             .arg(format!("O={}", self.build_dir.to_str().unwrap()))
             .arg(format!("ARCH={}", self.arch))
-            .arg(format!("CROSS_COMPILE={}", cross_compile.to_str().unwrap()))
+            .arg(format!("CROSS_COMPILE={}", toolchain.cross_compile))
             .arg("-C").arg(self.source_dir.clone())
             .arg(format!("-j{}", self.jobs))
             .arg("--")
@@ -335,9 +289,6 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
         http_handle: curl::easy::Easy::new(),
         jobs: config.jobs,
         arch: config.toolchain.linux_arch.clone(),
-        toolchain: config.toolchain.cross_compile.clone(),
-        toolchain_url: Url::parse(&config.toolchain.url)
-            .context(error::InvalidToolchainURL{})?,
         interrupt: interrupt,
     })
 }

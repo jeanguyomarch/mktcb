@@ -31,6 +31,10 @@ pub enum Error {
     InvalidToolchainURL {
         source: url::ParseError,
     },
+    #[snafu(display("The URL to retrieve U-Boot seems invalid: {}", source))]
+    InvalidUbootURL {
+        source: url::ParseError,
+    },
 
     #[snafu(display("Failed to read version file {}: {}", path, source))]
     FailedToReadVersion {
@@ -44,10 +48,10 @@ pub enum Error {
     },
 
     #[snafu(display("Corrupted download directory: the version file {:#?} does \
-            not exist, but the linux source {:#?} exists. Please remove this directory.",
-            version_file, linux_dir))]
+            not exist, but the source directory {:#?} exists. Please remove this directory.",
+            version_file, dir))]
     CorruptedSourceDir {
-        linux_dir: std::path::PathBuf,
+        dir: std::path::PathBuf,
         version_file: std::path::PathBuf,
     },
 
