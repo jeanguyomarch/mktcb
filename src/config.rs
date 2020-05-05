@@ -5,6 +5,7 @@ use snafu::{ResultExt, ensure};
 use clap::ArgMatches;
 use serde_derive::Deserialize;
 use serde::de;
+use log::*;
 
 use crate::error::Result;
 use crate::error;
@@ -92,6 +93,8 @@ fn load_target_config(library: &PathBuf, target: &str) -> Result<TargetConfig> {
     let file_contents = load_file(&path)?;
     let mut cfg = load_toml::<TargetConfig>(&file_contents, &path)?;
 
+    info!("Using target configuration at path {:#?}", path);
+
     cfg.linux.config = make_config_path(library, "linux", &cfg.linux)?;
     cfg.uboot.config = make_config_path(library, "uboot", &cfg.uboot)?;
 
@@ -114,15 +117,24 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
     // Library - if not provided by the user, default to the current
     // working directory
     let library = match matches.value_of("library") {
-        Some(val) => PathBuf::from(val).canonicalize()
-            .context(error::CanonFailed{dir: val.clone()})?,
+        Some(val) => {
+            PathBuf::from(val)
+                .canonicalize()
+                .context(error::CanonFailed{dir: val.clone()})?
+        },
         None => current_dir.clone(),
     };
 
     // Build directory - if not provided by the user, default to a
     // directory named build/ in the current working directory
     let download_dir = match matches.value_of("download_dir") {
-        Some(val) => PathBuf::from(val),
+        Some(val) => {
+
+            std::fs::create_dir_all(val).context(
+                error::CreateDirError{ path: val.clone() })?;
+            PathBuf::from(val).canonicalize()
+                .context(error::CanonFailed{dir: val.clone()})?
+        },
         None => {
             let mut download_dir = current_dir.clone();
             download_dir.push("download");
@@ -133,8 +145,10 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
     // Download directory - if not provided by the user, default to a
     // directory named download/ in the current working directory
     let build_dir = match matches.value_of("build_dir") {
-        Some(val) => PathBuf::from(val).canonicalize()
-            .context(error::CanonFailed{dir: val.clone()})?,
+        Some(val) => {
+            PathBuf::from(val).canonicalize()
+                .context(error::CanonFailed{dir: val.clone()})?
+        },
         None => {
             let mut build_dir = current_dir;
             build_dir.push("build");
