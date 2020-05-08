@@ -2,3 +2,4 @@ url = "https://toolchains.bootlin.com/downloads/releases/toolchains/armv7-eabihf
 linux_arch = "arm"
 uboot_arch = "arm"
 cross_compile = "bin/arm-buildroot-linux-gnueabihf-"
+debian_arch = "armhf"

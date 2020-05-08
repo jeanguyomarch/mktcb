@@ -23,16 +23,8 @@ If you want to develop/debug, just omit the `--release` flag. Refer to
 
 ## How do I use this thing?
 
-`mktcb` relies on three directories:
-
-- a **download** directory (see the `-D` option) in which `mktcb` will download
-  and unpack files containing the sources of the trusted computing base
-  (e.g. the sources of the Linux kernel);
-- a **build** directory (see the `-B` option) in which `mktcb` will put build
-  artifacts of the trusted computing base. This includes all the object files
-  and end-user binaries;
-- a **library** directory (see the `-L` option) that `mktcb` explores for
-  configuration files. This directory has a strict structure
+Hopefully, the [Wiki][4] should answer all your questions. Don't hesitate
+to [ask questions][7].
 
 
 ## License
@@ -43,6 +35,7 @@ If you want to develop/debug, just omit the `--release` flag. Refer to
 [1]: https://en.wikipedia.org/wiki/Trusted_computing_base
 [2]: https://www.denx.de/wiki/U-Boot
 [3]: https://www.kernel.org/
-
+[4]: https://github.com/jeanguyomarch/mktcb/wiki
 [5]: https://www.rust-lang.org/
 [6]: https://doc.rust-lang.org/cargo/
+[7]: https://github.com/jeanguyomarch/mktcb/issues/new

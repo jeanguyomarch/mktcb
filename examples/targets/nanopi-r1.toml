@@ -1,4 +1,5 @@
 toolchain = "armv7-eabihf"
+name = "NanoPi-R1"
 
 [linux]
 version = "5.4"

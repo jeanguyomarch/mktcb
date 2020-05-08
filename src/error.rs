@@ -36,15 +36,15 @@ pub enum Error {
         source: url::ParseError,
     },
 
-    #[snafu(display("Failed to read version file {}: {}", path, source))]
+    #[snafu(display("Failed to read version file {:#?}: {}", path, source))]
     FailedToReadVersion {
-        path: String,
+        path: std::path::PathBuf,
         source: std::io::Error,
     },
 
     #[snafu(display("Failed to decode UTF-8 string {}", source))]
     FailedToDecodeUTF8 {
-        source: std::str::Utf8Error,
+        source: std::string::FromUtf8Error,
     },
 
     #[snafu(display("Corrupted download directory: the version file {:#?} does \
@@ -202,6 +202,22 @@ pub enum Error {
     #[snafu(display("Failed to extract last URL component from {:#?}", url))]
     URLExtractError {
         url: url::Url,
+    },
+
+    #[snafu(display("Failed retrieve mandatory environment variable '{}': {}", var, source))]
+    MaintainerError {
+        source: std::env::VarError,
+        var: String,
+    },
+
+    #[snafu(display("Failed to create Debian package '{}'", package))]
+    DebFailed {
+        package: String,
+    },
+
+    #[snafu(display("We were expected to have created a Debian package at path {:#?}", path))]
+    NoPackage {
+        path: std::path::PathBuf,
     },
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;

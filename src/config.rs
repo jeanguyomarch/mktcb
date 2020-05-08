@@ -18,6 +18,9 @@ pub struct Config {
     pub toolchain: ToolchainConfig,
     pub linux: ComponentConfig,
     pub uboot: ComponentConfig,
+    /// Pretty name of the target
+    pub target_name: String,
+    /// Stem of the target
     pub target: String,
     pub jobs: usize,
 }
@@ -27,6 +30,7 @@ pub struct ToolchainConfig {
     pub url: String,
     pub linux_arch: String,
     pub uboot_arch: String,
+    pub debian_arch: String,
     pub cross_compile: String,
 }
 
@@ -39,6 +43,7 @@ pub struct ComponentConfig {
 #[derive(Debug, Deserialize)]
 struct TargetConfig {
     toolchain: String,
+    name: String,
     linux: ComponentConfig,
     uboot: ComponentConfig,
 }
@@ -129,7 +134,6 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
     // directory named build/ in the current working directory
     let download_dir = match matches.value_of("download_dir") {
         Some(val) => {
-
             std::fs::create_dir_all(val).context(
                 error::CreateDirError{ path: val.clone() })?;
             PathBuf::from(val).canonicalize()
@@ -146,6 +150,8 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
     // directory named download/ in the current working directory
     let build_dir = match matches.value_of("build_dir") {
         Some(val) => {
+            std::fs::create_dir_all(val).context(
+                error::CreateDirError{ path: val.clone() })?;
             PathBuf::from(val).canonicalize()
                 .context(error::CanonFailed{dir: val.clone()})?
         },
@@ -184,6 +190,7 @@ pub fn new(matches: &ArgMatches) -> Result<Config> {
         uboot: target_cfg.uboot,
         jobs: jobs,
         target: target.to_string(),
+        target_name: target_cfg.name.clone(),
         lib_dir: library,
     })
 }
