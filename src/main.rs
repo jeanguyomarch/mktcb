@@ -46,8 +46,7 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
         }
         if matches.is_present("debpkg") {
             let toolchain = toolchain::new(&config)?;
-            agent.make("bindeb-pkg", &toolchain)?;
-            let result = agent.debpkg()?;
+            let result = agent.debpkg(&toolchain)?;
             let path = PathBuf::from(matches.value_of("debpkg").unwrap());
             let mut file = std::fs::File::create(&path)
                 .context(error::CreateFileError{path: path.clone()})?;

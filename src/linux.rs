@@ -102,16 +102,12 @@ impl Linux {
     /// Upon success, the file is guaranteed to be valid.
     fn get_linux_image_deb_pkg(&self) -> Result<PathBuf> {
         // Debian packages (images) have the following form:
-        //     ../linux-image-5.4.38_5.4.38-1_armhf.deb
+        //     ../linux-image-5.4.38_1_armhf.deb
         // relative to the linux build directory.
         // 5.4.38 is obviously the version, and 1 is the debian revision, that
-        // we can retrieve by querying a special file
-        let mut deb_v_file = self.build_dir.clone();
-        deb_v_file.push(".version");
-        let deb_version = util::read_file(&deb_v_file)?;
-
-        let base = format!("linux-image-{}_{}-{}_{}.deb",
-            self.version, self.version, deb_version, self.debian_arch);
+        // is enforced via a make variable
+        let base = format!("linux-image-{}_1_{}.deb",
+            self.version, self.debian_arch);
         let mut path = self.build_dir.clone();
         path.pop();
         path.push(base);
@@ -164,6 +160,19 @@ impl Linux {
         });
 
         patch::apply_patches_in(&try_path, &self.source_dir)
+    }
+
+
+    /// Generate the command to call make in Linux' sources
+    fn get_make_cmd(&self, toolchain: &Toolchain) -> Command {
+        let mut make_cmd = Command::new("make");
+        make_cmd
+            .arg("-C").arg(self.source_dir.clone())
+            .arg(format!("-j{}", self.jobs))
+            .arg(format!("O={}", self.build_dir.to_str().unwrap()))
+            .arg(format!("ARCH={}", self.arch))
+            .arg(format!("CROSS_COMPILE={}", toolchain.cross_compile));
+        make_cmd
     }
 
     pub fn fetch(&mut self) -> Result<()> {
@@ -239,8 +248,19 @@ impl Linux {
     /// Build a Debian meta-package allowing to perform easy upgrades of
     /// the Linux kernel.
     /// Upon success, the path to the created debian package is returned.
-    pub fn debpkg(&mut self) -> Result<Vec<PathBuf>> {
+    pub fn debpkg(&mut self, toolchain: &Toolchain) -> Result<Vec<PathBuf>> {
+        toolchain.fetch()?;
         self.load_version()?;
+
+        let make_target = "bindeb-pkg";
+        let status = self.get_make_cmd(toolchain)
+            .arg("KDEB_PKGVERSION=1")
+            .arg("--")
+            .arg(make_target)
+            .status()
+            .context(error::ProgFailed{ proc: "make".to_string() })?;
+        ensure!(status.success(), error::MakeFailed{target: make_target.to_string()});
+
         let mut package = format!("linux-image-{}.{}-{}",
                 self.version.maj, self.version.min, self.target);
         // Compose the path to the DEBIAN directory and create it.
@@ -312,12 +332,7 @@ Priority: required
     pub fn make(&mut self, make_target: &str, toolchain: &Toolchain) -> Result<()> {
         toolchain.fetch()?;
         self.load_version()?;
-        let status = Command::new("make")
-            .arg(format!("O={}", self.build_dir.to_str().unwrap()))
-            .arg(format!("ARCH={}", self.arch))
-            .arg(format!("CROSS_COMPILE={}", toolchain.cross_compile))
-            .arg("-C").arg(self.source_dir.clone())
-            .arg(format!("-j{}", self.jobs))
+        let status = self.get_make_cmd(toolchain)
             .arg("--")
             .arg(make_target)
             .status()
