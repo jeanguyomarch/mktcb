@@ -30,7 +30,6 @@ pub struct ToolchainConfig {
     pub url: String,
     pub linux_arch: String,
     pub uboot_arch: String,
-    pub debian_arch: String,
     pub cross_compile: String,
 }
 

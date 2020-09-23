@@ -48,7 +48,6 @@ pub struct Linux {
     interrupt: Interrupt,
     arch: String,
     name: String,
-    debian_arch: String,
     jobs: usize,
 }
 
@@ -95,26 +94,6 @@ impl Linux {
                 })?;
             Ok((url, file))
         }
-    }
-
-    /// Retrieve the path to the debian package containing the
-    /// linux-image.
-    /// Upon success, the file is guaranteed to be valid.
-    fn get_linux_image_deb_pkg(&self) -> Result<PathBuf> {
-        // Debian packages (images) have the following form:
-        //     ../linux-image-5.4.38_1_armhf.deb
-        // relative to the linux build directory.
-        // 5.4.38 is obviously the version, and 1 is the debian revision, that
-        // is enforced via a make variable
-        let base = format!("linux-image-{}_1_{}.deb",
-            self.version, self.debian_arch);
-        let mut path = self.build_dir.clone();
-        path.pop();
-        path.push(base);
-
-        // Check that the debian package exist before returning its path
-        ensure!(path.is_file(), error::NoPackage{ path: path.clone()});
-        Ok(path)
     }
 
     /// Download the whole source tree of the Linux kernel. They will
@@ -245,90 +224,6 @@ impl Linux {
         }
     }
 
-    /// Build a Debian meta-package allowing to perform easy upgrades of
-    /// the Linux kernel.
-    /// Upon success, the path to the created debian package is returned.
-    pub fn debpkg(&mut self, toolchain: &Toolchain) -> Result<Vec<PathBuf>> {
-        toolchain.fetch()?;
-        self.load_version()?;
-
-        let make_target = "bindeb-pkg";
-        let status = self.get_make_cmd(toolchain)
-            .arg("KDEB_PKGVERSION=1")
-            .arg("--")
-            .arg(make_target)
-            .status()
-            .context(error::ProgFailed{ proc: "make".to_string() })?;
-        ensure!(status.success(), error::MakeFailed{target: make_target.to_string()});
-
-        let mut package = format!("linux-image-{}.{}-{}",
-                self.version.maj, self.version.min, self.target);
-        // Compose the path to the DEBIAN directory and create it.
-        let mut deb_dir = self.pkg_dir.clone();
-        deb_dir.push(&package);
-        let mut deb = deb_dir.clone();
-        deb.push("DEBIAN");
-        std::fs::create_dir_all(&deb).context(
-            error::CreateDirError{ path: deb.clone() })?;
-        deb.push("control");
-
-        // Create the contents of the DEBIAN/control file. It is automatically
-        // generated from the current state of the Linux sources.
-        // Note that this is scoped so that the DEBIAN/control file is EFFECTIVELY
-        // flushed to the filesystem before dpkg-deb tries to read it.
-        {
-            let maintainer = util::getenv("MAINTAINER")?;
-            let control = format!("
-Package: {}
-Architecture: {}
-Maintainer: {}
-Description: Linux kernel, version {}.{}.z for {}
- This is a meta-package allowing to manage updates of the Linux kernel
- for the {}
-Depends: linux-image-{}
-Version: {}
-Section: custom/kernel
-Priority: required
-",
-                package,
-                self.debian_arch,
-                maintainer,
-                self.version.maj, self.version.min, self.name,
-                self.name,
-                self.version,
-                self.version);
-            let mut file = std::fs::File::create(&deb)
-                .context(error::CreateFileError{path: deb.clone()})?;
-            file.write_all(control.as_bytes())
-                .context(error::FailedToWrite{
-                    path: deb.clone(),
-                })?;
-        }
-
-        // Run dpkg-deb to create the meta-package
-        let status = Command::new("dpkg-deb")
-            .arg("--build")
-            .arg(&package)
-            .current_dir(&self.pkg_dir)
-            .stdin(Stdio::null())
-            .status()
-            .context(error::ProgFailed{ proc: "dpkg-deb".to_string() })?;
-        ensure!(status.success(), error::DebFailed{package: package});
-
-        // Finally, return the path to the debian file. Hoping that it
-        // was indeed created.
-        let mut result = self.pkg_dir.clone();
-        package.push_str(".deb");
-        result.push(package);
-        ensure!(result.is_file(), error::NoPackage{path:result.clone()});
-
-        let image = self.get_linux_image_deb_pkg()?;
-        Ok(vec![
-            image,
-            result,
-        ])
-    }
-
     pub fn make(&mut self, make_target: &str, toolchain: &Toolchain) -> Result<()> {
         toolchain.fetch()?;
         self.load_version()?;
@@ -417,7 +312,6 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
         http_handle: curl::easy::Easy::new(),
         jobs: config.jobs,
         arch: config.toolchain.linux_arch.clone(),
-        debian_arch: config.toolchain.debian_arch.clone(),
         target: config.target.clone(),
         name: config.target_name.clone(),
         interrupt: interrupt,

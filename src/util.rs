@@ -34,10 +34,6 @@ pub fn copy_config(opt_cfg: &Option<PathBuf>, build_dir: &PathBuf) -> Result<()>
     Ok(())
 }
 
-pub fn getenv(var: &str) -> Result<String> {
-    std::env::var(var).context(error::MaintainerError{ var: var.to_string() })
-}
-
 pub fn read_file(path: &std::path::PathBuf) -> Result<String> {
     let contents = std::fs::read(&path).context(
         error::FailedToReadVersion { path: path.clone() }
