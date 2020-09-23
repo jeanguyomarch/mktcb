@@ -387,7 +387,8 @@ fn make_patches_dir(base_dir: &PathBuf) -> PathBuf {
 
 /// Create a new instance for Linux management
 pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
-    let version = make_version(&config.linux.version)?;
+    let linux = config.linux.as_ref().unwrap(); // Already checked
+    let version = make_version(&linux.version)?;
     let mut v_file = config.download_dir.clone();
     v_file.push(format!("linux-{}.{}.version", version.maj, version.min));
 
@@ -402,7 +403,7 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
         build_dir: make_version_dir(&config.build_dir, &version),
         pkg_dir: pkg_dir,
         patches_dir: make_patches_dir(&config.lib_dir),
-        config: config.linux.config.clone(),
+        config: linux.config.clone(),
         version: version,
         version_file: v_file,
         base_url: Url::parse(&url).context(error::InvalidLinuxURL{})?,

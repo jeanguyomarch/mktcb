@@ -102,7 +102,8 @@ fn make_patches_dir(base_dir: &PathBuf, version: &str) -> PathBuf {
 }
 
 pub fn new(config: &Config, interrupt: Interrupt) -> Result<Uboot> {
-    let version = config.uboot.version.clone();
+    let uboot = config.uboot.as_ref().unwrap(); // Already checked
+    let version = uboot.version.clone();
     let url =  format!("ftp://ftp.denx.de/pub/u-boot/u-boot-{}.tar.bz2", version);
 
     // Compose the path to the version file
@@ -116,7 +117,7 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Uboot> {
         patches_dir: make_patches_dir(&config.lib_dir, &version),
         version_file: v_file,
         url: url::Url::parse(&url).context(error::InvalidUbootURL{})?,
-        config: config.uboot.config.clone(),
+        config: uboot.config.clone(),
         version: version,
         arch: config.toolchain.uboot_arch.clone(),
         interrupt: interrupt,

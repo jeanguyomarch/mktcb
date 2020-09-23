@@ -16,7 +16,7 @@ mod util;
 use std::io::Write;
 // ----------------------------------------------------------------------------
 
-use snafu::{ResultExt};
+use snafu::{ResultExt, ensure};
 use clap::{Arg, App, SubCommand};
 use crate::error::Result;
 use log::*;
@@ -29,6 +29,7 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
     let interrupt = interrupt::get()?;
 
     if let Some(matches) = matches.subcommand_matches("linux") {
+        ensure!(config.linux.is_some(), error::NoLinux{});
         let mut agent = linux::new(&config, interrupt)?;
 
         if matches.is_present("check-update") {
@@ -65,6 +66,7 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
             agent.make(target, &toolchain)?;
         }
     } else if let Some(matches) = matches.subcommand_matches("uboot") {
+        ensure!(config.uboot.is_some(), error::NoLinux{});
         let agent = uboot::new(&config, interrupt)?;
         if matches.is_present("fetch") {
             agent.fetch()?;

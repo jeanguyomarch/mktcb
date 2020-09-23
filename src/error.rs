@@ -219,5 +219,12 @@ pub enum Error {
     NoPackage {
         path: std::path::PathBuf,
     },
+
+    #[snafu(display("There are no linux configuration in configuration"))]
+    NoLinux {
+    },
+    #[snafu(display("There are no u-boot configuration in configuration"))]
+    NoUboot {
+    },
 }
 pub type Result<T, E = Error> = std::result::Result<T, E>;

@@ -16,8 +16,8 @@ pub struct Config {
     pub lib_dir: PathBuf,
     pub download_dir: PathBuf,
     pub toolchain: ToolchainConfig,
-    pub linux: ComponentConfig,
-    pub uboot: ComponentConfig,
+    pub linux: Option<ComponentConfig>,
+    pub uboot: Option<ComponentConfig>,
     /// Pretty name of the target
     pub target_name: String,
     /// Stem of the target
@@ -44,8 +44,8 @@ pub struct ComponentConfig {
 struct TargetConfig {
     toolchain: String,
     name: String,
-    linux: ComponentConfig,
-    uboot: ComponentConfig,
+    linux: Option<ComponentConfig>,
+    uboot: Option<ComponentConfig>,
 }
 
 
@@ -100,8 +100,12 @@ fn load_target_config(library: &PathBuf, target: &str) -> Result<TargetConfig> {
 
     info!("Using target configuration at path {:#?}", path);
 
-    cfg.linux.config = make_config_path(library, "linux", &cfg.linux)?;
-    cfg.uboot.config = make_config_path(library, "uboot", &cfg.uboot)?;
+    if let Some(linux) = &mut cfg.linux {
+        linux.config = make_config_path(library, "linux", &linux)?;
+    }
+    if let Some(uboot) = &mut cfg.uboot {
+        uboot.config = make_config_path(library, "uboot", &uboot)?;
+    }
 
     Ok(cfg)
 }
