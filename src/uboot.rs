@@ -93,6 +93,13 @@ fn make_version_dir(base_dir: &PathBuf, version: &str) -> PathBuf {
     path
 }
 
+/// Compose the build directory in which the U-Boot will be built
+fn make_build_dir(base_dir: &PathBuf, version: &str, target: &str) -> PathBuf {
+    let mut path = base_dir.clone();
+    path.push(format!("u-boot-{}-{}", version, target));
+    path
+}
+
 fn make_patches_dir(base_dir: &PathBuf, version: &str) -> PathBuf {
     let mut path = base_dir.clone();
     path.push("patches");
@@ -113,7 +120,7 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Uboot> {
     Ok(Uboot {
         download_dir: config.download_dir.clone(),
         source_dir: make_version_dir(&config.download_dir, &version),
-        build_dir: make_version_dir(&config.build_dir, &version),
+        build_dir: make_build_dir(&config.build_dir, &version, &config.target),
         patches_dir: make_patches_dir(&config.lib_dir, &version),
         version_file: v_file,
         url: url::Url::parse(&url).context(error::InvalidUbootURL{})?,

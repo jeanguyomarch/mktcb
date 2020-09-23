@@ -377,6 +377,13 @@ fn make_version_dir(base_dir: &PathBuf, version: &Version) -> PathBuf {
     path
 }
 
+/// Compose the build directory in which the Linux kernel will be built
+fn make_build_dir(base_dir: &PathBuf, version: &Version, target: &str) -> PathBuf {
+    let mut path = base_dir.clone();
+    path.push(format!("linux-{}.{}-{}", version.maj, version.min, target));
+    path
+}
+
 fn make_patches_dir(base_dir: &PathBuf) -> PathBuf {
     let mut path = base_dir.clone();
     path.push("patches");
@@ -400,7 +407,7 @@ pub fn new(config: &Config, interrupt: Interrupt) -> Result<Linux> {
     Ok(Linux {
         download_dir: config.download_dir.clone(),
         source_dir: make_version_dir(&config.download_dir, &version),
-        build_dir: make_version_dir(&config.build_dir, &version),
+        build_dir: make_build_dir(&config.build_dir, &version, &config.target),
         pkg_dir: pkg_dir,
         patches_dir: make_patches_dir(&config.lib_dir),
         config: linux.config.clone(),
