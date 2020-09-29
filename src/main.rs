@@ -42,6 +42,9 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
         if matches.is_present("fetch") {
             agent.fetch()?;
         }
+        if matches.is_present("save-config") {
+            agent.save_config()?;
+        }
         if matches.is_present("reconfigure") {
             agent.reconfigure()?;
         }
@@ -58,6 +61,12 @@ fn run(matches: &clap::ArgMatches) -> Result<()> {
         let agent = uboot::new(&config, interrupt)?;
         if matches.is_present("fetch") {
             agent.fetch()?;
+        }
+        if matches.is_present("save-config") {
+            agent.save_config()?;
+        }
+        if matches.is_present("reconfigure") {
+            agent.reconfigure()?;
         }
         if matches.occurrences_of("make") != 0 {
             // Retrive the make target to be run. It is a required argument,
@@ -122,6 +131,9 @@ fn main() {
             .arg(Arg::with_name("reconfigure")
                 .long("reconfigure")
                 .help("Re-generate the Linux .config from the target config"))
+            .arg(Arg::with_name("save-config")
+                .long("save-config")
+                .help("Use the Linux .config as the new TCB config (overwrites)"))
             .arg(Arg::with_name("fetch")
                 .long("fetch")
                 .help("Retrieve the latest version of the Linux kernel")))
@@ -133,6 +145,12 @@ fn main() {
                 .default_value("all")
                 .help("Run a make target in the U-Boot tree")
                 .takes_value(true))
+            .arg(Arg::with_name("reconfigure")
+                .long("reconfigure")
+                .help("Re-generate the U-Boot .config from the target config"))
+            .arg(Arg::with_name("save-config")
+                .long("save-config")
+                .help("Use the U-Boot .config as the new TCB config (overwrites)"))
             .arg(Arg::with_name("fetch")
                 .long("fetch")
                 .help("Retrieve U-Boot")))

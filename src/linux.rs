@@ -210,6 +210,13 @@ impl Linux {
         util::copy_config(&self.config, &self.build_dir)
     }
 
+    /// Take the Linux Kconfig from the build directory and use it as the main
+    /// configuration file
+    pub fn save_config(&self) -> Result<()> {
+        ensure!(self.config.is_some(), error::NoLinux{});
+        util::save_config(&self.config.as_ref().unwrap(), &self.build_dir)
+    }
+
     /// Check if a new update patch is present. If not, there are no updates.
     /// If we cannot find the version file, we *assume* the sources were not
     /// retrieved, so they technically can be updated (going from nothing to

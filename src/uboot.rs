@@ -41,17 +41,27 @@ impl Uboot {
         Ok(())
     }
 
+    pub fn reconfigure(&self) -> Result<()> {
+        // Copy the initial configuration, if any
+        util::copy_config(&self.config, &self.build_dir)
+    }
+
+    /// Take the U-Boot Kconfig from the build directory and use it as the main
+    /// configuration file
+    pub fn save_config(&self) -> Result<()> {
+        ensure!(self.config.is_some(), error::NoUboot{});
+        util::save_config(&self.config.as_ref().unwrap(), &self.build_dir)
+    }
+
     fn download(&self) -> Result<()> {
         let mut http_handle = curl::easy::Easy::new();
         download::to_unpacked_dir(
             &mut http_handle, &self.url, &self.download_dir, &self.source_dir)?;
 
-        // Copy the initial configuration, if any
-        util::copy_config(&self.config, &self.build_dir)?;
-
         // Apply patches on the working directory and then write the version.
         // A sigint may not interrupt this...
         self.interrupt.lock();
+        self.reconfigure()?;
         patch::apply_patches_in(&self.patches_dir, &self.source_dir)?;
         self.write_version()
     }
